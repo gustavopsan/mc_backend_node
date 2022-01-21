@@ -12,7 +12,7 @@ const port = 3000;
 app.use(bodyParser.json());
 app.use(CORS());
 
-app.get("/", verifyJWT, (req, res) => {
+app.get("/", (req, res) => {
     res.json(
         {
             message: "Server initializated."
@@ -20,9 +20,51 @@ app.get("/", verifyJWT, (req, res) => {
     )
 });
 
-app.post("/auth", (req, res, next) => {
+app.post("/checkLogin", (req, res) => {
+    let token = req.body.token;
+
+    if(!token)
+    {
+        res.json(
+            {
+                auth: false,
+                message: "No token provided."
+            }
+        )
+    }
+    else
+    {
+        JWT.verify(token, process.env.SECRET, (error, decoded) =>{
+            if (error)
+            {
+                console.info("API: Session invalid");
+                res.json(
+                    {
+                        auth: false,
+                        message: "Failed to authenticate token"
+                    }
+                )
+            }
+            else
+            {
+                console.info("API: Session authenticated successfully");
+                res.json(
+                    {
+                        auth: true,
+                        decodedInfo: decoded,
+                        message: "Session authenticated successfully."
+                    }
+                )
+            }
+        })
+    }
+})
+
+app.post("/auth", (req, res) => {
     let username = req.body.username;
     let password = req.body.password;
+
+    console.log("API: Data received: ", req.body);
 
     SQL.query(`SELECT * FROM mc_users WHERE username="${username}"`, (error, rows) => {
         if (error)
@@ -35,11 +77,13 @@ app.post("/auth", (req, res, next) => {
         {
             if(rows.length > 0)
             {
+                console.info("API: Username matched on query.");
                 if(password === rows[0]._password)
                 {
+                    console.info("API: Password matched on query.");
                     const userId = rows[0].user_id;
                     const token = JWT.sign({userId}, process.env.SECRET, {
-                        expiresIn: 600
+                        expiresIn: 5000
                     });
 
                     return res.json(
@@ -51,6 +95,7 @@ app.post("/auth", (req, res, next) => {
                 }
                 else
                 {
+                    console.info("API: Failed to logon: Password not matched.");
                     res.json(
                         {
                             auth: false,
@@ -62,6 +107,7 @@ app.post("/auth", (req, res, next) => {
             }
             else
             {
+                console.info("API: Failed to logon: User not matched.");
                 res.json(
                     {
                         auth: false,
@@ -82,39 +128,6 @@ app.post("/logout", (req, res) => {
         }
     )
 })
-
-function verifyJWT(req, res, next) {
-    const token = req.headers["x-access-token"];
-
-    if(!token)
-    {
-        res.json(
-            {
-                auth: false,
-                message: "No token provided."
-            }
-        )
-    }
-    else
-    {
-        JWT.verify(token, process.env.SECRET, (error, decoded) =>{
-            if (error)
-            {
-                res.json(
-                    {
-                        auth: false,
-                        message: "Failed to authenticate token"
-                    }
-                )
-            }
-            else
-            {
-                req.userId = decoded.userId;
-                next();
-            }
-        })
-    }
-}
 
 const server = http.createServer(app);
 server.listen(port);
